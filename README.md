@@ -8,13 +8,14 @@ The .NET app is only a static host. It serves the page, the runtime files and th
 On first start the host downloads the models (about 1.6 GB) into `models/` from Hugging Face. The browser then caches
 them with the Cache API.
 
+
+<img width="557" height="869" alt="image" src="https://github.com/user-attachments/assets/3212f437-5592-4503-abc8-a3b40a11cd49" />
+
 **TODO**
 -----
 - try to load a smaller model
 - ability to create larger images without increasing time to generate
 - making sure this works under Apple M-series chips
-
-<img width="557" height="869" alt="image" src="https://github.com/user-attachments/assets/3212f437-5592-4503-abc8-a3b40a11cd49" />
 
 
 ## Dependencies
