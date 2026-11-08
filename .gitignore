@@ -11,6 +11,9 @@
 *.sln.docstates
 *.env
 
+# Ignore downloaded ONNX models
+SmallSdWeb/models/
+
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 

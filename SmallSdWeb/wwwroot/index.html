@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Small X Studio</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --bg: #f6f5f2; --panel: #ffffff; --text: #1d1c1a; --muted: #6b6862; --line: #e3e0da;
+      --accent: #3f5bd9; --accent-text: #ffffff; --danger: #b3261e; --tile: #ecebe7;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151513; --panel: #1f1e1c; --text: #ecebe7; --muted: #9c9890; --line: #33312d;
+        --accent: #8299ff; --accent-text: #10131f; --danger: #ff8a80; --tile: #2a2926;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    header { padding: 20px 24px 0; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+    h1 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: -0.01em; }
+    #status { color: var(--muted); font-size: 13px; }
+    #status.ready::before { content: "●"; color: #2e9d5b; margin-right: 6px; }
+    #status.error { color: var(--danger); }
+    main { display: grid; grid-template-columns: 340px 1fr; gap: 24px; padding: 20px 24px 32px; }
+    @media (max-width: 820px) { main { grid-template-columns: 1fr; padding: 16px; } header { padding: 16px 16px 0; } }
+    form { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: grid; gap: 14px; align-self: start; }
+    label { display: grid; gap: 6px; font-size: 13px; font-weight: 550; }
+    label span.val { color: var(--muted); font-weight: 400; float: right; }
+    textarea, input, select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
+    textarea { resize: vertical; min-height: 84px; }
+    input[type=range] { padding: 0; accent-color: var(--accent); }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    button { font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 10px 14px; background: var(--accent); color: var(--accent-text); cursor: pointer; }
+    button:disabled { opacity: .5; cursor: default; }
+    button.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
+    .actions { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+    .actions button[hidden] { display: none; }
+    .actions:has(> button[hidden]) { grid-template-columns: 1fr; }
+    .progress { height: 6px; background: var(--tile); border-radius: 3px; overflow: hidden; }
+    .progress > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+    #message { font-size: 13px; color: var(--muted); min-height: 1.5em; }
+    #estimate { border: 1px solid var(--line); border-left: 3px solid #d08a1c; border-radius: 8px; padding: 10px 12px; font-size: 13px; display: grid; gap: 4px; }
+    #estimate[hidden] { display: none; }
+    #estimate strong { font-size: 14px; }
+    #estimate .sub { color: var(--muted); font-size: 12px; }
+    #message.error { color: var(--danger); }
+    #gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; align-content: start; }
+    figure { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+    figure img { display: block; width: 100%; height: auto; background: var(--tile); }
+    figcaption { padding: 10px 12px; font-size: 13px; display: grid; gap: 4px; }
+    figcaption .meta { color: var(--muted); font-size: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
+    figcaption a { color: var(--accent); }
+    .empty { color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; padding: 40px; text-align: center; }
+    #device { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 8px; font-size: 13px; }
+    #device .verdict { font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    #device .row { display: grid; grid-template-columns: 16px 64px 1fr; gap: 4px 8px; align-items: baseline; }
+    #device .k { color: var(--muted); }
+    #device .v { overflow-wrap: anywhere; }
+    #device .note { grid-column: 3; color: var(--muted); font-size: 12px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; background: var(--muted); }
+    .dot.ok { background: #2e9d5b; } .dot.warn { background: #d08a1c; } .dot.fail { background: var(--danger); } .dot.info { background: var(--accent); }
+    .lbl { display: block; }
+    .help { position: relative; display: inline-grid; place-items: center; width: 16px; height: 16px; margin-left: 4px; border-radius: 50%;
+      border: 1px solid var(--line); background: var(--tile); color: var(--muted); font-size: 11px; font-weight: 600; line-height: 1; cursor: help; vertical-align: 1px; }
+    .help:hover, .help:focus-visible, .help.open { color: var(--text); border-color: var(--muted); outline: none; }
+    .help .tip { position: absolute; z-index: 10; top: calc(100% + 6px); left: -8px; width: min(260px, calc(100vw - 48px)); padding: 8px 10px;
+      border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); box-shadow: 0 4px 16px rgb(0 0 0 / .15);
+      font-size: 12px; font-weight: 400; line-height: 1.45; text-align: left; cursor: default; visibility: hidden; opacity: 0; transition: opacity .12s; }
+    .help:hover .tip, .help:focus-visible .tip, .help.open .tip { visibility: visible; opacity: 1; }
+    .tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--tile); color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Small X Studio</h1>
+    <div id="status">Connecting…</div>
+  </header>
+  <main>
+    <form id="form">
+      <label>Processor
+        <select id="backend">
+          <option value="auto">Auto</option>
+          <option value="webgpu">GPU (WebGPU)</option>
+          <option value="webnn">GPU (WebNN)</option>
+          <option value="wasm">CPU (WebAssembly)</option>
+        </select>
+      </label>
+      <div id="device" aria-live="polite"></div>
+      <label><span class="lbl">Prompt <span class="help" tabindex="0" role="button" aria-label="What is this?" aria-describedby="tip-prompt">?<span class="tip" role="tooltip" id="tip-prompt">Describe the image you want: subject, setting, style and lighting. Separate ideas with commas; earlier words usually carry more weight. Only the first 77 tokens (about 60 words) are used.</span></span></span>
+        <textarea id="prompt" required>a cozy cabin in a snowy pine forest at dusk, warm light in the windows, highly detailed</textarea>
+      </label>
+      <label><span class="lbl">Negative prompt <span class="help" tabindex="0" role="button" aria-label="What is this?" aria-describedby="tip-negative">?<span class="tip" role="tooltip" id="tip-negative">Things you <em>don’t</em> want in the image, such as “blurry, extra fingers, text, watermark”. The image is steered away from these at every step. Leave it blank if there’s nothing to avoid.</span></span></span>
+        <textarea id="negative" style="min-height:56px">blurry, low quality, deformed</textarea>
+      </label>
+      <label><span class="lbl">Steps <span class="help" tabindex="0" role="button" aria-label="What is this?" aria-describedby="tip-steps">?<span class="tip" role="tooltip" id="tip-steps">How many times the image is refined, starting from random noise. More steps add detail but take longer: time grows in proportion. 20–30 is usually enough; above 40 rarely helps.</span></span> <span class="val" id="stepsVal"></span></span>
+        <input id="steps" type="range" min="5" max="50" value="20">
+      </label>
+      <label><span class="lbl">Guidance <span class="help" tabindex="0" role="button" aria-label="What is this?" aria-describedby="tip-guidance">?<span class="tip" role="tooltip" id="tip-guidance">How closely the image follows the prompt. Low (1–4): looser and more varied. 7–8: balanced, the usual choice. High (12+): very literal, but colours can look harsh or oversaturated.</span></span> <span class="val" id="guidanceVal"></span></span>
+        <input id="guidance" type="range" min="1" max="15" step="0.5" value="7.5">
+      </label>
+      <div class="row">
+        <label>Width
+          <select id="width"><option>384</option><option selected>512</option><option>640</option><option>768</option></select>
+        </label>
+        <label>Height
+          <select id="height"><option>384</option><option selected>512</option><option>640</option><option>768</option></select>
+        </label>
+      </div>
+      <label><span class="lbl">Seed (blank = random) <span class="help" tabindex="0" role="button" aria-label="What is this?" aria-describedby="tip-seed">?<span class="tip" role="tooltip" id="tip-seed">The number that sets the starting noise. The same seed with the same prompt and settings gives the same image, so you can reuse a seed you like and adjust the prompt to make variations. Each image shows its seed, with a “Reuse seed” link.</span></span></span>
+        <input id="seed" type="number" min="0" placeholder="random">
+      </label>
+      <div id="estimate" hidden aria-live="polite"></div>
+      <div class="actions">
+        <button id="go" type="submit" disabled>Generate</button>
+        <button id="cancel" type="button" class="secondary" hidden>Cancel</button>
+      </div>
+      <div class="progress"><div id="bar"></div></div>
+      <div id="message"></div>
+    </form>
+    <section id="gallery"><div class="empty" id="empty">Generated images appear here.</div></section>
+  </main>
+
+  <script type="module">
+    import { checkDevice, processorCheck, BACKENDS, CPU_MAX_SIDE, cpuThreads, estimateCpu, recordCpuRun, formatDuration } from "/js/device-check.js";
+    const $ = id => document.getElementById(id);
+    const sync = () => { $("stepsVal").textContent = $("steps").value; $("guidanceVal").textContent = $("guidance").value; renderEstimate(); };
+    $("steps").oninput = $("guidance").oninput = sync;
+    $("width").onchange = $("height").onchange = () => renderEstimate();
+
+    const MODEL_BASE = "/models/"; // models are only ever loaded from this site
+    let modelsReady = false, busy = false, engine = null, abort = null;
+    let device = null, deviceChecking = false;
+    let backendChoice = "auto";
+    try { backendChoice = localStorage.getItem("sd-backend") ?? "auto"; } catch {}
+    $("backend").value = backendChoice;
+    $("backend").onchange = () => {
+      backendChoice = $("backend").value;
+      try { localStorage.setItem("sd-backend", backendChoice); } catch {}
+      refresh();
+    };
+
+    /** The backend that will actually run: the user's choice, or what Auto picked for this device. */
+    const resolvedBackend = () => backendChoice !== "auto" ? backendChoice : device?.auto ?? "webgpu";
+
+    /** Device checks with the "Runs on" row and the verdict adjusted to the selected backend. */
+    function deviceReport() {
+      if (!device?.backends) return device;
+      const checks = device.checks.map(c => c.label === "Runs on" ? processorCheck(resolvedBackend(), device.auto) : c);
+      const verdict = checks.some(c => c.status === "fail") ? "fail" : checks.some(c => c.status === "warn") ? "warn" : "ok";
+      return { ...device, checks, verdict };
+    }
+
+    async function runDeviceCheck() {
+      if (deviceChecking) return;
+      deviceChecking = true;
+      if (!device) $("device").innerHTML = `<div class="verdict"><span class="dot"></span>Checking this device…</div>`;
+      try { device = await checkDevice(MODEL_BASE); }
+      catch (err) { device = { verdict: "warn", checks: [{ label: "Check", value: "Device check failed", status: "warn", note: String(err) }] }; }
+      deviceChecking = false;
+      refresh();
+    }
+
+    function renderBackendOptions() {
+      if (!device?.backends) return;
+      for (const option of $("backend").options) {
+        if (option.value === "auto") { option.textContent = `Auto: ${BACKENDS[device.auto].label}`; continue; }
+        const b = device.backends[option.value];
+        option.disabled = !b.available;
+        option.textContent = BACKENDS[option.value].label + (b.available ? "" : " (unavailable)");
+        option.title = b.reason;
+      }
+      if ($("backend").selectedOptions[0]?.disabled) { backendChoice = "auto"; $("backend").value = "auto"; }
+    }
+
+    function renderDevice() {
+      if (!device) return;
+      const report = deviceReport();
+      const verdicts = {
+        ok: "Meets the requirements",
+        warn: "Should work, with caveats",
+        fail: "Doesn't meet the requirements",
+      };
+      const el = $("device");
+      el.innerHTML = `<div class="verdict"><span class="dot ${report.verdict}"></span></div>`;
+      el.querySelector(".verdict").append(verdicts[report.verdict]);
+      for (const c of report.checks) {
+        const row = document.createElement("div");
+        row.className = "row";
+        row.innerHTML = `<span class="dot"></span><span class="k"></span><span class="v"></span>`;
+        row.querySelector(".dot").classList.add(c.status);
+        row.querySelector(".dot").title = c.status;
+        row.querySelector(".k").textContent = c.label;
+        row.querySelector(".v").textContent = c.value;
+        if (c.note) { const n = document.createElement("span"); n.className = "note"; n.textContent = c.note; row.append(n); }
+        el.append(row);
+      }
+    }
+
+    /** The CPU can't make images larger than 512×512, so bigger sizes are disabled while it is selected. */
+    function applySizeLimit() {
+      const cpu = device && resolvedBackend() === "wasm";
+      for (const select of [$("width"), $("height")]) {
+        for (const option of select.options) option.disabled = cpu && +option.value > CPU_MAX_SIDE;
+        if (select.selectedOptions[0]?.disabled) select.value = String(CPU_MAX_SIDE);
+      }
+    }
+
+    /** Time estimate shown whenever the CPU is the selected processor. */
+    function renderEstimate() {
+      const el = $("estimate");
+      el.hidden = !device || resolvedBackend() !== "wasm";
+      if (el.hidden) return;
+      const req = { steps: +$("steps").value, width: +$("width").value, height: +$("height").value, threads: cpuThreads() };
+      const est = estimateCpu(req);
+      el.innerHTML = `<strong></strong><span></span><span class="sub"></span>`;
+      el.querySelector("strong").textContent = `Estimated time on the CPU: ${formatDuration(est.total)}`;
+      el.querySelector("span").textContent =
+        `${req.steps} steps at ${req.width}×${req.height} using ${req.threads} thread${req.threads > 1 ? "s" : ""}, ` +
+        `about ${formatDuration(est.perStep, true)} per step. A GPU takes seconds.`;
+      el.querySelector(".sub").textContent = (est.calibrated
+        ? "Based on this device's last CPU image."
+        : `A rough guide from the thread count; your first CPU image refines it.`) +
+        ` The CPU is limited to ${CPU_MAX_SIDE}×${CPU_MAX_SIDE}; fewer steps or 384×384 are quicker.`;
+    }
+
+    function refresh() {
+      applySizeLimit();
+      renderEstimate();
+      renderBackendOptions();
+      renderDevice();
+      $("go").disabled = busy || !modelsReady || !device || deviceReport().verdict === "fail";
+      $("backend").disabled = busy;
+      $("cancel").hidden = !busy;
+    }
+
+    /** The site downloads the models on its first start; wait until it can serve them. */
+    async function pollModels() {
+      try {
+        const s = await (await fetch("/api/status")).json();
+        modelsReady = s.phase === "ready";
+        const el = $("status");
+        el.className = modelsReady ? "ready" : s.phase === "error" ? "error" : "";
+        el.textContent = modelsReady ? "Models available"
+          : s.phase === "error" ? `Models unavailable · ${s.detail}`
+          : `Site is fetching the models${s.detail ? " · " + s.detail : ""}`;
+      } catch { $("status").textContent = "Site unreachable"; }
+      refresh();
+      if (!modelsReady) setTimeout(pollModels, 1500);
+    }
+
+    // Help bubbles: hover or keyboard focus shows them; a tap or click toggles them (for touch screens).
+    // preventDefault stops the click from also focusing the field the label belongs to.
+    document.querySelectorAll(".help").forEach(help => {
+      help.addEventListener("click", e => {
+        e.preventDefault();
+        const open = !help.classList.contains("open");
+        document.querySelectorAll(".help.open").forEach(h => h.classList.remove("open"));
+        help.classList.toggle("open", open);
+      });
+      help.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); help.click(); } else if (e.key === "Escape") { help.classList.remove("open"); help.blur(); } });
+    });
+    document.addEventListener("click", e => {
+      if (!e.target.closest(".help")) document.querySelectorAll(".help.open").forEach(h => h.classList.remove("open"));
+    });
+
+    function setMessage(text, isError) { $("message").textContent = text; $("message").className = isError ? "error" : ""; }
+
+    $("form").onsubmit = async e => {
+      e.preventDefault();
+      busy = true; refresh(); $("bar").style.width = "0";
+      const req = {
+        prompt: $("prompt").value, negativePrompt: $("negative").value,
+        steps: +$("steps").value, guidance: +$("guidance").value,
+        width: +$("width").value, height: +$("height").value,
+        seed: $("seed").value === "" ? null : +$("seed").value,
+      };
+      abort = new AbortController();
+      $("cancel").disabled = false; $("cancel").textContent = "Cancel";
+      try { await generate(req, abort.signal); }
+      catch (err) {
+        if (err.name === "AbortError") { setMessage("Cancelled."); $("bar").style.width = "0"; }
+        else { console.error(err); setMessage(err.message ?? String(err), true); }
+      }
+      abort = null;
+      busy = false; refresh();
+    };
+
+    // A model run can't be interrupted, so cancelling takes effect when the current step finishes.
+    $("cancel").onclick = () => {
+      abort?.abort();
+      $("cancel").disabled = true; $("cancel").textContent = "Cancelling…";
+      setMessage("Cancelling after the current step…");
+    };
+
+    async function generate(req, signal) {
+      const backend = resolvedBackend();
+      const { BrowserDiffusion, needsReloadFor } = await import("/js/browser-sd.js");
+      if (needsReloadFor(backend)) {
+        // The processor choice is saved, so it's still selected after the reload.
+        if (confirm("Switching between CPU and GPU processing needs a page reload, which clears the images generated so far. Reload now?"))
+          location.reload();
+        else setMessage("To use this processor, reload the page.");
+        return;
+      }
+      if (engine && engine.backend !== backend) {
+        setMessage("Switching processor…");
+        await engine.dispose();
+        engine = null;
+      }
+      if (!engine) {
+        engine = await BrowserDiffusion.load(MODEL_BASE, backend, s => setMessage(s));
+        runDeviceCheck(); // models are cached now
+      }
+      signal.throwIfAborted();
+
+      const seed = req.seed ?? Math.floor(Math.random() * 2 ** 32);
+      const started = performance.now();
+      const cpuEstimate = backend === "wasm" ? estimateCpu({ ...req, threads: cpuThreads() }) : null;
+      let firstStepDone = null;
+      setMessage("Encoding prompt…");
+      const blob = await engine.generate({ ...req, seed, signal }, (step, total) => {
+        if (signal.aborted) return; // keep the "Cancelling…" message
+        $("bar").style.width = `${(step / total) * 100}%`;
+        const now = performance.now(), elapsed = (now - started) / 1000;
+        if (step >= total) { setMessage(`Decoding… ${formatDuration(elapsed, true)} elapsed`); return; }
+
+        // Time left: the average step from step 2 on (step 1 includes loading), plus decoding.
+        let perStep;
+        if (step === 1) { firstStepDone = now; perStep = cpuEstimate?.perStep ?? elapsed; }
+        else perStep = (now - firstStepDone) / 1000 / (step - 1);
+        const left = perStep * (total - step) + (cpuEstimate?.decode ?? 1);
+        setMessage(`Step ${step} / ${total} · ${formatDuration(elapsed, true)} elapsed · ${formatDuration(left)} left`);
+      });
+      setMessage(`Done in ${formatDuration((performance.now() - started) / 1000, true)} on ${BACKENDS[backend].label}`);
+      if (backend === "wasm" && engine.lastRun) { recordCpuRun(engine.lastRun); renderEstimate(); }
+      addImage(URL.createObjectURL(blob), seed, req, BACKENDS[backend].label);
+    }
+
+    function addImage(url, seed, req, where) {
+      $("empty")?.remove();
+      const fig = document.createElement("figure");
+      fig.innerHTML = `<img alt=""><figcaption><div class="p"></div>
+        <div class="meta"><span class="tag"></span><span>seed ${seed}</span><span>${req.steps} steps</span><span>cfg ${req.guidance}</span>
+        <a download="small-sd-${seed}.png">Download</a><a href="#" class="reuse">Reuse seed</a></div></figcaption>`;
+      fig.querySelector("img").src = url;
+      fig.querySelector("img").alt = req.prompt;
+      fig.querySelector(".p").textContent = req.prompt;
+      fig.querySelector(".tag").textContent = where;
+      fig.querySelector("a[download]").href = url;
+      fig.querySelector(".reuse").onclick = ev => { ev.preventDefault(); $("seed").value = seed; };
+      $("gallery").prepend(fig);
+    }
+
+    sync();
+    runDeviceCheck();
+    pollModels();
+  </script>
+</body>
+</html>
