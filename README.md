@@ -17,13 +17,7 @@ them with the Cache API.
 
 ## Dependencies
 
-### .NET (server)
-
-| Dependency | Version
-|---|---|---|
-| .NET SDK | 10.0 (`net10.0`)
-| ASP.NET Core (`Microsoft.NET.Sdk.Web`) | ships with .NET 10
-| `Microsoft.Extensions.Http` (`IHttpClientFactory`) | ships with .NET 10 | Downloading the models from Hugging Face |
+### .NET SDK (`net10.0`)
 
 The project has **no NuGet package references**. Everything above is part of the .NET shared framework.
 
