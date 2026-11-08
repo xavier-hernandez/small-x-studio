@@ -14,6 +14,8 @@ them with the Cache API.
 - ability to create larger images without increasing time to generate
 - making sure this works under Apple M-series chips
 
+<img width="557" height="869" alt="image" src="https://github.com/user-attachments/assets/3212f437-5592-4503-abc8-a3b40a11cd49" />
+
 
 ## Dependencies
 
