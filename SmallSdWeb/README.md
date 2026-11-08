@@ -11,6 +11,7 @@ them with the Cache API.
 **TODO**
 -----
 - try to load a smaller model
+- load different models for anime, logos, etc.
 - ability to create larger images without increasing time to generate
 - making sure this works under Apple M-series chips
 

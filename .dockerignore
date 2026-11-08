@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+**/models/
+**/.vs/
+**/.vscode/
+**/*.user
+**/*.env
+.git/
+.gitignore
+.dockerignore
+Dockerfile
+compose.yaml
+graphify-out/

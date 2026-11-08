@@ -1,0 +1,13 @@
+services:
+  smallsdweb:
+    build: .
+    image: smallsdweb
+    ports:
+      # Browse to http://localhost:8080. WebGPU needs a secure context, and localhost counts as one.
+      - "8080:8080"
+    volumes:
+      - models:/app/models
+    restart: unless-stopped
+
+volumes:
+  models:

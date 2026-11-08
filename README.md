@@ -11,6 +11,14 @@ them with the Cache API.
 
 <img width="557" height="869" alt="image" src="https://github.com/user-attachments/assets/3212f437-5592-4503-abc8-a3b40a11cd49" />
 
+## Run with Docker
+
+```sh
+docker compose up --build
+```
+
+Then open http://localhost:8080. The models are downloaded into the `models` volume on first start, so later
+starts skip the download. Use `localhost` (or HTTPS) in the address: browsers only enable WebGPU in a secure context.
 **TODO**
 -----
 - try to load a smaller model
