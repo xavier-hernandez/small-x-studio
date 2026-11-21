@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>About · Small X Studio</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/css/site.css">
+  <style>
+    .flow { display: grid; gap: 8px; margin: 12px 0; padding: 0; list-style: none; counter-reset: step; }
+    .flow li { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; }
+    .flow li::before { counter-increment: step; content: counter(step); display: grid; place-items: center; width: 24px; height: 24px;
+      border-radius: 50%; background: var(--tile); color: var(--muted); font-size: 12px; font-weight: 650; }
+    .muted { color: var(--muted); font-size: 14px; }
+    #storage-list td.num, #storage-list th.num { text-align: right; white-space: nowrap; }
+    #storage-list td:last-child { text-align: right; width: 1%; white-space: nowrap; }
+    #storage-list button { padding: 4px 10px; font-size: 13px; }
+    #storage-list tfoot td { font-weight: 600; border-bottom: 0; }
+    .storage-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+    .storage-actions .muted { font-size: 13px; flex: 1 1 260px; }
+    button.danger { background: var(--danger); color: var(--panel); }
+  </style>
+</head>
+<body>
+  <nav class="site-nav" aria-label="Main">
+    <a class="brand" href="/">Small X Studio</a>
+    <ul>
+      <li><a href="/">Home</a></li>
+      <li><a href="/generate">Generate images</a></li>
+      <li><a href="/summarize">Summarize text</a></li>
+      <li><a href="/about" aria-current="page">About</a></li>
+    </ul>
+  </nav>
+
+  <article class="prose">
+    <div class="page-head" style="padding-left:0; padding-right:0"><h1>About this project</h1></div>
+    <p class="lead">Small X Studio runs small AI models entirely in your browser. Every image and summary is computed on
+      your own device with ONNX Runtime Web; the site only supplies the files.</p>
+
+    <h2>How it works</h2>
+    <ol class="flow">
+      <li><span>The first time you use a tool, your browser downloads that tool’s model from this site and stores it
+        with the Cache API. Later visits load it from disk, so only the first run waits for the network. Each tool
+        downloads only the model you pick.</span></li>
+      <li><span>ONNX Runtime Web turns the model into a session on your GPU (WebGPU or WebNN) or CPU (WebAssembly,
+        multi-threaded) and runs it. Your prompt or text is processed locally and never sent anywhere.</span></li>
+      <li><span>The result appears on the page. Images and summaries are kept only in the open tab: download or copy
+        what you want to keep before you reload or leave.</span></li>
+    </ol>
+
+    <h2>Models</h2>
+    <table>
+      <thead><tr><th>Tool</th><th>Model</th><th>Your browser downloads</th><th>Runs on</th><th>License</th></tr></thead>
+      <tbody>
+        <tr><td>Images, 512px</td><td><a href="https://huggingface.co/danyalmalik/small-sd-ONNX-WebGPU">small-sd ONNX</a>, from
+          <a href="https://huggingface.co/segmind/small-sd">segmind/small-sd</a>: text encoder, UNet and VAE decoder</td>
+          <td>1.6 GB</td><td>GPU or CPU</td><td>CreativeML OpenRAIL-M</td></tr>
+        <tr><td>Pixel-art sprites</td><td><a href="https://huggingface.co/AnticPan/mini-pixel-art">mini-pixel-art</a> (large
+          size, 8.8M parameters): a tiny diffusion transformer that works directly on 16×16 pixels</td>
+          <td>34 MB</td><td>WebGPU or CPU</td><td>MIT; trained on a dataset generated with Krea 2, whose license may also apply</td></tr>
+        <tr><td>Summaries</td><td><a href="https://huggingface.co/Xenova/distilbart-cnn-6-6">DistilBART-CNN 6-6</a>, from
+          <a href="https://huggingface.co/sshleifer/distilbart-cnn-6-6">sshleifer/distilbart-cnn-6-6</a>. Fast: int8 weights.
+          Best: full precision (fp32), better summaries</td>
+          <td>Fast 290 MB<br>Best 1.1 GB</td><td>CPU</td><td>Apache 2.0</td></tr>
+      </tbody>
+    </table>
+    <p>Each model has its own pipeline in plain JavaScript: the tokenizers (CLIP and GPT-2 byte-level BPE, and a word
+      table for pixel art), the samplers (DPM-Solver++ for Small SD, flow matching for pixel art), and beam search for
+      summaries, with the summarization model’s own settings (4 beams, no repeated 3-word phrases, length penalty).</p>
+
+    <h2>Choosing a processor and model</h2>
+    <ul>
+      <li><strong>Small SD</strong> is fastest on <strong>WebGPU</strong>: seconds per image. <strong>WebNN</strong>
+        compiles the model again for each new image size, so the first image at a size is slow. The <strong>CPU</strong>
+        takes minutes per image and is limited to 512×512, since larger images don’t fit in WebAssembly’s 4 GB memory.
+        The page shows a time estimate for the CPU and refines it from your device’s first CPU image.</li>
+      <li>Switching Small SD between a GPU processor and the CPU needs a page reload: ONNX Runtime decides once per page
+        whether CPU work runs in a background worker. The reload clears the images made so far.</li>
+      <li><strong>Mini Pixel Art</strong> uses WebGPU when that’s your processor, and the CPU otherwise. At 8.8M
+        parameters it’s small enough for either: well under a second per sprite on WebGPU, several seconds on the CPU. Captions are looked up word by word in the training
+        vocabulary, so write short noun phrases (“side-view knight with sword”); unknown words are ignored and listed
+        after each run.</li>
+      <li><strong>Summaries</strong> always run on the CPU, in a background thread, because the Fast model’s int8 weights
+        only run well on WebAssembly. Fast and Best summarize at about the same speed once loaded; Best takes about twice
+        as long to load and uses more memory. The model was trained on news, so it works best on factual English prose.
+        It reads up to 1,024 tokens (about 750 words) at a time: longer text is split at sentence ends, with one summary
+        paragraph per part.</li>
+      <li><strong>Seeds</strong> make images reproducible: the same seed, prompt and settings give the same image.
+        “Reuse seed” on any image puts its seed back in the form.</li>
+    </ul>
+
+    <h2>Your data</h2>
+    <table>
+      <thead><tr><th>What</th><th>Where</th><th>How long</th></tr></thead>
+      <tbody>
+        <tr><td>Prompts, pasted text</td><td>Only in the page</td><td>Until you leave or reload it</td></tr>
+        <tr><td>Generated images and summaries</td><td>The tab’s memory</td><td>Until you leave or reload; use Download or Copy to keep them</td></tr>
+        <tr><td>Model files</td><td>The browser’s Cache API, for this site only</td><td>Until you delete them under <a href="#storage">Storage</a> below or clear site data, or the browser frees space when the disk is full</td></tr>
+        <tr><td>Settings (processor, chosen model, measured CPU speed)</td><td><code>localStorage</code></td><td>Until you use Clear everything under <a href="#storage">Storage</a> or clear site data</td></tr>
+      </tbody>
+    </table>
+    <p>Prompts, text and results are never sent to the site. Apart from downloading files, the only request the pages
+      make is a status check that asks whether the model files are available.</p>
+
+    <h2 id="storage">Storage</h2>
+    <p>The models this browser has stored for the site. Deleting one frees its disk space; it downloads again the next
+      time you use its tool. A tab that already has a model loaded keeps using it until that tab is reloaded.</p>
+    <div id="storage-list" aria-live="polite"><p class="muted">Checking…</p></div>
+    <p id="storage-estimate" class="muted"></p>
+    <div class="storage-actions">
+      <button type="button" id="clear-all" class="danger">Clear everything</button>
+      <span class="muted">Deletes all stored models and resets your settings (processor, chosen models, measured CPU speed).</span>
+    </div>
+
+    <h2>What your browser needs</h2>
+    <ul>
+      <li><strong>WebGPU</strong> with 16-bit float support (<code>shader-f16</code>) for the fastest image generation,
+        in a recent Chrome or Edge; or <strong>WebNN</strong> (experimental) on Windows. The image page checks your
+        device and shows which processors are available, and why not if one isn’t.</li>
+      <li><strong>WebAssembly with threads</strong> for everything on the CPU, including summaries. Threads need
+        <code>SharedArrayBuffer</code>, which browsers only allow on cross-origin isolated pages; this site is set up for it.</li>
+      <li>A secure address: <code>https://</code> or <code>localhost</code>. Browsers turn WebGPU off on plain HTTP, so
+        if the GPU shows as unavailable, check the address bar.</li>
+      <li>Disk space for the models you use, and about 4 GB of free memory for Small SD.</li>
+    </ul>
+
+    <h2>Status messages</h2>
+    <table>
+      <thead><tr><th>You see</th><th>It means</th></tr></thead>
+      <tbody>
+        <tr><td>Site is fetching the model</td><td>The site itself doesn’t have that model yet, for example right after it
+          was set up. The tool unlocks by itself when the model arrives; other tools may already be ready.</td></tr>
+        <tr><td>Downloading … %</td><td>Your browser is downloading the model for the first time. It’s stored afterwards,
+          so this happens once per model, unless the site data is cleared.</td></tr>
+        <tr><td>Preparing …</td><td>ONNX Runtime is building the session for your processor. This happens on every visit
+          and takes a few seconds; with WebNN it happens again for each new image size.</td></tr>
+        <tr><td>Not enough room to cache the models</td><td>The browser won’t store the files, so they download again on
+          every visit. Free some disk space.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Built with</h2>
+    <ul>
+      <li><a href="https://onnxruntime.ai/">ONNX Runtime Web</a> 1.29, served by this site (no CDN). It is the only
+        JavaScript library.</li>
+      <li>Plain HTML, CSS and ES modules, with no build step. A small ASP.NET Core server hosts the files and answers
+        the status check.</li>
+    </ul>
+  </article>
+
+  <script type="module">
+    import { listModels, deleteModel, clearAll, storageEstimate, formatBytes } from "/js/storage.js";
+    const $ = id => document.getElementById(id);
+    let busy = false;
+
+    async function render() {
+      const list = $("storage-list");
+      let rows;
+      try { rows = await listModels(); }
+      catch (err) { list.innerHTML = `<p class="muted"></p>`; list.firstChild.textContent = `Couldn't read the stored models: ${err.message ?? err}`; return; }
+
+      if (!rows.length) list.innerHTML = `<p class="muted">No models are stored in this browser.</p>`;
+      else {
+        list.innerHTML = `<table><thead><tr><th>Model</th><th>Used by</th><th class="num">Size</th><th></th></tr></thead>
+          <tbody></tbody><tfoot><tr><td>Total</td><td></td><td class="num"></td><td></td></tr></tfoot></table>`;
+        for (const r of rows) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td></td><td></td><td class="num"></td><td><button type="button" class="secondary">Delete</button></td>`;
+          tr.cells[0].textContent = r.label;
+          tr.cells[1].textContent = r.tool;
+          tr.cells[2].textContent = formatBytes(r.bytes);
+          const button = tr.querySelector("button");
+          button.setAttribute("aria-label", `Delete ${r.label}`);
+          button.onclick = () => run(button, () => deleteModel(r.id));
+          list.querySelector("tbody").append(tr);
+        }
+        list.querySelector("tfoot .num").textContent = formatBytes(rows.reduce((n, r) => n + r.bytes, 0));
+      }
+      $("clear-all").disabled = busy;
+
+      const est = await storageEstimate();
+      $("storage-estimate").textContent = est?.quota
+        ? `The browser reports ${formatBytes(est.usage ?? 0)} used by this site, of ${formatBytes(est.quota)} it allows. ` +
+          `Its figure can differ from the total above, since it counts all of the site’s storage and may update with a delay.`
+        : "";
+    }
+
+    async function run(button, action) {
+      if (busy) return;
+      busy = true;
+      document.querySelectorAll("#storage-list button, #clear-all").forEach(b => b.disabled = true);
+      const label = button.textContent;
+      button.textContent = "Deleting…";
+      try { await action(); }
+      catch (err) { alert(`Couldn't delete: ${err.message ?? err}`); }
+      busy = false;
+      button.textContent = label;
+      await render();
+    }
+
+    $("clear-all").onclick = e => {
+      if (!confirm("Delete all stored models and reset your settings? Models download again the next time you use them.")) return;
+      run(e.currentTarget, clearAll);
+    };
+    render();
+  </script>
+</body>
+</html>

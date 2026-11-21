@@ -20,6 +20,17 @@ let proxied = null;
 /** True when this page has already initialised ONNX Runtime for a backend incompatible with `backend`. */
 export const needsReloadFor = backend => proxied !== null && proxied !== (backend === "wasm");
 
+/**
+ * Fixes ORT's proxy mode for this page on the first model load, from the processor the user picked.
+ * Every pipeline calls this before creating sessions.
+ */
+export function initRuntime(processor) {
+  if (needsReloadFor(processor)) throw new Error("Switching between the CPU and a GPU processor needs a page reload");
+  if (proxied === null) ort.env.wasm.proxy = proxied = processor === "wasm";
+}
+
+export { ort };
+
 /** CLIP byte-level BPE tokenizer (port of openai/CLIP simple_tokenizer), driven by vocab.json + merges.txt. */
 class ClipTokenizer {
   static #pattern = /<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+/giu;
@@ -142,7 +153,7 @@ class DpmSolverScheduler {
 }
 
 /** Fetches a file, serving it from the Cache API when already downloaded. */
-async function fetchCached(url, onProgress) {
+export async function fetchCached(url, onProgress) {
   let cache = null;
   try {
     cache = await caches.open(CACHE_NAME);
@@ -174,7 +185,7 @@ async function fetchCached(url, onProgress) {
   return bytes;
 }
 
-function mulberry32(seed) {
+export function mulberry32(seed) {
   let a = seed >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;
@@ -212,8 +223,7 @@ export class BrowserDiffusion {
    */
   static async load(baseUrl, backend, onStatus) {
     if (!(backend in BACKENDS)) throw new Error(`Unknown backend ${backend}`);
-    if (needsReloadFor(backend)) throw new Error("Switching between the CPU and a GPU processor needs a page reload");
-    if (proxied === null) ort.env.wasm.proxy = proxied = backend === "wasm";
+    initRuntime(backend);
     const self = new BrowserDiffusion();
     self.backend = backend;
     self.#onStatus = onStatus;

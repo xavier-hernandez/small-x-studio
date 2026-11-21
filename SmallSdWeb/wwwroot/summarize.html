@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Summarize text · Small X Studio</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/css/site.css">
+  <style>
+    main { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px; padding: 20px 24px 32px; }
+    @media (max-width: 820px) { main { grid-template-columns: 1fr; padding: 16px; } }
+    #text { min-height: 300px; }
+    .counts { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+    .counts button { padding: 0; background: none; color: var(--accent); font-size: 12px; font-weight: 550; }
+    .counts .links { display: flex; gap: 12px; }
+    .note { font-size: 12px; color: var(--muted); margin: 0; }
+    #results { display: grid; gap: 16px; align-content: start; }
+    .result { padding: 16px 18px; display: grid; gap: 10px; }
+    .result p { margin: 0; line-height: 1.6; white-space: pre-wrap; }
+    .result .meta { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; color: var(--muted); font-size: 12px; }
+    .result .meta button { margin-left: auto; padding: 4px 10px; font-size: 12px; }
+    .empty { color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; padding: 40px; text-align: center; }
+  </style>
+</head>
+<body>
+  <nav class="site-nav" aria-label="Main">
+    <a class="brand" href="/">Small X Studio</a>
+    <ul>
+      <li><a href="/">Home</a></li>
+      <li><a href="/generate">Generate images</a></li>
+      <li><a href="/summarize" aria-current="page">Summarize text</a></li>
+      <li><a href="/about">About</a></li>
+    </ul>
+  </nav>
+  <div class="page-head">
+    <h1>Summarize text</h1>
+    <div id="status" class="status">Connecting…</div>
+  </div>
+  <main>
+    <form id="form" class="panel">
+      <label><span class="lbl">Text <span class="help" tabindex="0" role="button" aria-label="What is this?" aria-describedby="tip-text">?<span class="tip" role="tooltip" id="tip-text">Paste an article, report or long message in English. The model was trained on news stories, so it works best on factual prose. It reads up to about 750 words at a time; longer text is split into parts, and each part gets its own summary paragraph.</span></span></span>
+        <textarea id="text" required placeholder="Paste the text to summarize…"></textarea>
+      </label>
+      <div class="counts">
+        <span id="counts">0 words</span>
+        <span class="links"><button type="button" id="sample">Use sample text</button><button type="button" id="clear">Clear</button></span>
+      </div>
+      <label><span class="lbl">Model <span class="help" tabindex="0" role="button" aria-label="What is this?" aria-describedby="tip-variant">?<span class="tip" role="tooltip" id="tip-variant">Both are the same summarization model. Fast stores its weights as 8-bit integers: a 290 MB download that loads in a few seconds. Best keeps full precision: a 1.1 GB download that takes about twice as long to load and uses more memory, but writes noticeably better summaries. Once loaded, both summarize at about the same speed.</span></span></span>
+        <select id="variant">
+          <option value="fast" selected>Fast · 290 MB</option>
+          <option value="best">Best · 1.1 GB</option>
+        </select>
+      </label>
+      <div class="row">
+        <label><span class="lbl">Length <span class="help" tabindex="0" role="button" aria-label="What is this?" aria-describedby="tip-length">?<span class="tip" role="tooltip" id="tip-length">Roughly how long each summary paragraph is. Short is about 25–60 words, Medium (the model’s default) about 40–100, Long about 75–180. The model may stop earlier when it has covered the main points.</span></span></span>
+          <select id="length"><option value="short">Short</option><option value="medium" selected>Medium</option><option value="long">Long</option></select>
+        </label>
+        <label><span class="lbl">Search <span class="help" tabindex="0" role="button" aria-label="What is this?" aria-describedby="tip-search">?<span class="tip" role="tooltip" id="tip-search">How the summary is written, word by word. Thorough keeps 4 candidate summaries at every step and picks the most likely (beam search, the model’s own setting); it tends to be shorter and stick closer to the text. Quick keeps only the single most likely next word: about twice as fast, often a little longer, but it can wander.</span></span></span>
+          <select id="beams"><option value="4" selected>Thorough</option><option value="1">Quick</option></select>
+        </label>
+      </div>
+      <div class="actions">
+        <button id="go" type="submit" disabled>Summarize</button>
+        <button id="cancel" type="button" class="secondary" hidden>Cancel</button>
+      </div>
+      <div class="progress"><div id="bar"></div></div>
+      <div id="message" class="message"></div>
+      <p class="note">Runs on your device’s CPU, in a background thread: the text never leaves this browser. The first run with a model downloads it (<span id="size">290 MB</span>); later runs load it from the browser’s cache.</p>
+    </form>
+    <section id="results" aria-live="polite"><div class="empty" id="empty">Summaries appear here.</div></section>
+  </main>
+
+  <script type="module">
+    import { initHelp, watchModel } from "/js/help.js";
+    const $ = id => document.getElementById(id);
+    const CHUNK_TOKENS = 1022, TOKENS_PER_WORD = 1.35; // estimate only; the worker counts exact tokens
+    const SAMPLE = `The city council voted on Tuesday to approve a new plan for public transport that will add three bus routes and extend the tram line to the northern suburbs by 2028. The plan, which has been debated for more than two years, is expected to cost about 450 million dollars, with most of the money coming from a regional infrastructure fund and the rest from a small increase in parking fees in the city centre.
+
+Supporters say the changes will cut commuting times for tens of thousands of residents who currently rely on cars, and will reduce traffic and air pollution in the busiest neighbourhoods. "This is the biggest investment in public transport our city has made in a generation," the mayor said after the vote. "People in the north have waited far too long for a fast and reliable connection to the centre."
+
+Critics, including several local business groups, argue that higher parking fees will drive shoppers away from the centre and hurt small shops that are still recovering from the pandemic. Some residents of the northern suburbs have also raised concerns about construction noise and the loss of parking spaces along the planned tram route.
+
+Construction on the first section of the tram extension is due to start next spring. The new bus routes will begin running in September, and the council has promised to review parking fees after the first year.`;
+
+    // Mirrors VARIANTS in js/summarizer.js (not imported here, so the page doesn't load ONNX Runtime itself).
+    // `status` is the server's /api/status key.
+    const VARIANTS = {
+      fast: { status: "summarizer", label: "Fast", size: "290 MB" },
+      best: { status: "summarizer-full", label: "Best", size: "1.1 GB" },
+    };
+    const SEARCH = { 4: "Thorough", 1: "Quick" };
+    const load = (key, fallback) => { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } };
+    const save = (key, value) => { try { localStorage.setItem(key, value); } catch {} };
+
+    let ready = false, busy = false, worker = null, job = null;
+    $("variant").value = load("summarizer-variant", "fast") in VARIANTS ? load("summarizer-variant", "fast") : "fast";
+    $("size").textContent = VARIANTS[$("variant").value].size;
+
+    function refresh() {
+      $("go").disabled = busy || !ready || !$("text").value.trim();
+      $("cancel").hidden = !busy;
+      for (const id of ["variant", "length", "beams", "sample", "clear"]) $(id).disabled = busy;
+      $("text").readOnly = busy;
+    }
+    function setMessage(text, isError) { $("message").textContent = text; $("message").className = "message" + (isError ? " error" : ""); }
+
+    function updateCounts() {
+      const text = $("text").value.trim();
+      const words = text ? text.split(/\s+/).length : 0;
+      const parts = Math.max(1, Math.ceil(words * TOKENS_PER_WORD / CHUNK_TOKENS));
+      $("counts").textContent = !words ? "0 words"
+        : `${words.toLocaleString()} word${words > 1 ? "s" : ""}` + (parts > 1 ? ` · about ${parts} parts, one paragraph each` : "");
+      refresh();
+    }
+    $("text").oninput = updateCounts;
+    $("sample").onclick = () => { $("text").value = SAMPLE; updateCounts(); };
+    $("clear").onclick = () => { $("text").value = ""; updateCounts(); $("text").focus(); };
+
+    /** The summarizer runs in a worker, created on first use and kept, so the model loads once per visit. */
+    function getWorker() {
+      if (worker) return worker;
+      worker = new Worker("/js/summarize-worker.js", { type: "module" });
+      worker.onmessage = ({ data }) => job?.[data.type]?.(data);
+      worker.onerror = e => { worker = null; job?.error({ message: e.message || "The summarizer stopped unexpectedly." }); };
+      return worker;
+    }
+
+    $("form").onsubmit = e => {
+      e.preventDefault();
+      const req = { text: $("text").value, variant: $("variant").value, length: $("length").value, beams: +$("beams").value };
+      busy = true; refresh();
+      $("bar").style.width = "0"; $("cancel").disabled = false; $("cancel").textContent = "Cancel";
+      setMessage("Starting…");
+      const done = () => { job = null; busy = false; refresh(); };
+      job = {
+        status: ({ text }) => setMessage(text),
+        progress: ({ chunk, chunks, step, maxSteps }) => {
+          if (job.cancelling) return;
+          $("bar").style.width = `${((chunk - 1 + step / maxSteps) / chunks) * 100}%`;
+          setMessage(`Writing the summary${chunks > 1 ? ` · part ${chunk} of ${chunks}` : ""} · ${step} tokens`);
+        },
+        result: r => {
+          $("bar").style.width = "100%";
+          setMessage(`Done in ${r.seconds < 60 ? r.seconds.toFixed(1) + " s" : Math.round(r.seconds / 60) + " min"}`);
+          addResult(r, req);
+          done();
+        },
+        error: ({ message, cancelled }) => {
+          $("bar").style.width = "0";
+          setMessage(cancelled ? "Cancelled." : message, !cancelled);
+          done();
+        },
+      };
+      getWorker().postMessage({ type: "summarize", ...req });
+    };
+
+    // Decoding can't stop mid-step, so cancelling takes effect after the current token.
+    $("cancel").onclick = () => {
+      if (!job) return;
+      job.cancelling = true;
+      worker?.postMessage({ type: "cancel" });
+      $("cancel").disabled = true; $("cancel").textContent = "Cancelling…";
+      setMessage("Cancelling…");
+    };
+
+    function addResult({ summary, inputTokens, chunks, seconds }, req) {
+      $("empty")?.remove();
+      const card = document.createElement("article");
+      card.className = "result panel";
+      card.innerHTML = `<p></p><div class="meta"><span class="tag"></span><span></span><span></span><button type="button" class="secondary">Copy</button></div>`;
+      card.querySelector("p").textContent = summary;
+      const words = summary.split(/\s+/).length;
+      card.querySelector(".tag").textContent =
+        `${VARIANTS[req.variant].label} model · ${req.length[0].toUpperCase()}${req.length.slice(1)} · ${SEARCH[req.beams]}`;
+      const [a, b] = card.querySelectorAll(".meta > span:not(.tag)");
+      a.textContent = `${words} words from ${inputTokens.toLocaleString()} tokens${chunks > 1 ? ` in ${chunks} parts` : ""}`;
+      b.textContent = `${seconds.toFixed(1)} s`;
+      const copy = card.querySelector("button");
+      copy.onclick = async () => {
+        try { await navigator.clipboard.writeText(summary); copy.textContent = "Copied"; }
+        catch { copy.textContent = "Copy failed"; }
+        setTimeout(() => copy.textContent = "Copy", 1500);
+      };
+      $("results").prepend(card);
+    }
+
+    initHelp();
+    updateCounts();
+    const status = watchModel(() => VARIANTS[$("variant").value].status, $("status"), s => { ready = s?.phase === "ready"; refresh(); });
+    $("variant").onchange = () => {
+      save("summarizer-variant", $("variant").value);
+      $("size").textContent = VARIANTS[$("variant").value].size;
+      status.show();
+    };
+  </script>
+</body>
+</html>

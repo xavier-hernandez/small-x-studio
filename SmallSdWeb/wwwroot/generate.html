@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Generate images · Small X Studio</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/css/site.css">
+  <style>
+    main { display: grid; grid-template-columns: 340px 1fr; gap: 24px; padding: 20px 24px 32px; }
+    @media (max-width: 820px) { main { grid-template-columns: 1fr; padding: 16px; } }
+    #estimate { border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 8px; padding: 10px 12px; font-size: 13px; display: grid; gap: 4px; }
+    #estimate strong { font-size: 14px; }
+    #estimate .sub { color: var(--muted); font-size: 12px; }
+    #gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; align-content: start; }
+    figure { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+    figure img { display: block; width: 100%; height: auto; background: var(--tile); }
+    /* Sprites: hard pixel edges, on a checkerboard so transparency shows. */
+    figure img.pixel { image-rendering: pixelated; background: repeating-conic-gradient(var(--tile) 0 25%, var(--panel) 0 50%) 0 0 / 12.5% 12.5%; }
+    figcaption { padding: 10px 12px; font-size: 13px; display: grid; gap: 4px; }
+    figcaption .meta { color: var(--muted); font-size: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
+    .empty { color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; padding: 40px; text-align: center; }
+    #device { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 8px; font-size: 13px; }
+    #device .verdict { font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    #device .row { display: grid; grid-template-columns: 16px 64px 1fr; gap: 4px 8px; align-items: baseline; }
+    #device .k { color: var(--muted); }
+    #device .v { overflow-wrap: anywhere; }
+    #device .note { grid-column: 3; color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <nav class="site-nav" aria-label="Main">
+    <a class="brand" href="/">Small X Studio</a>
+    <ul>
+      <li><a href="/">Home</a></li>
+      <li><a href="/generate" aria-current="page">Generate images</a></li>
+      <li><a href="/summarize">Summarize text</a></li>
+      <li><a href="/about">About</a></li>
+    </ul>
+  </nav>
+  <div class="page-head">
+    <h1>Generate images</h1>
+    <div id="status" class="status">Connecting…</div>
+  </div>
+  <main>
+    <form id="form" class="panel">
+      <label>Model
+        <select id="model">
+          <option value="small-sd">Small SD · 512px images · 1.6 GB</option>
+          <option value="mini-pixel-art">Mini Pixel Art · 16×16 sprites · 34 MB</option>
+        </select>
+      </label>
+      <label>Processor
+        <select id="backend">
+          <option value="auto">Auto</option>
+          <option value="webgpu">GPU (WebGPU)</option>
+          <option value="webnn">GPU (WebNN)</option>
+          <option value="wasm">CPU (WebAssembly)</option>
+        </select>
+      </label>
+      <div id="device" aria-live="polite"></div>
+      <label><span class="lbl">Prompt <span class="help" tabindex="0" role="button" aria-label="What is this?" aria-describedby="tip-prompt">?<span class="tip" role="tooltip" id="tip-prompt"></span></span></span>
+        <textarea id="prompt" required></textarea>
+      </label>
+      <label data-for="small-sd"><span class="lbl">Negative prompt <span class="help" tabindex="0" role="button" aria-label="What is this?" aria-describedby="tip-negative">?<span class="tip" role="tooltip" id="tip-negative">Things you <em>don’t</em> want in the image, such as “blurry, extra fingers, text, watermark”. The image is steered away from these at every step. Leave it blank if there’s nothing to avoid.</span></span></span>
+        <textarea id="negative" style="min-height:56px">blurry, low quality, deformed</textarea>
+      </label>
+      <label><span class="lbl">Steps <span class="help" tabindex="0" role="button" aria-label="What is this?" aria-describedby="tip-steps">?<span class="tip" role="tooltip" id="tip-steps"></span></span> <span class="val" id="stepsVal"></span></span>
+        <input id="steps" type="range">
+      </label>
+      <label><span class="lbl">Guidance <span class="help" tabindex="0" role="button" aria-label="What is this?" aria-describedby="tip-guidance">?<span class="tip" role="tooltip" id="tip-guidance"></span></span> <span class="val" id="guidanceVal"></span></span>
+        <input id="guidance" type="range">
+      </label>
+      <label data-for="mini-pixel-art">Images per run
+        <select id="count"><option>1</option><option selected>4</option><option>8</option><option>16</option></select>
+      </label>
+      <div class="row" data-for="small-sd">
+        <label>Width
+          <select id="width"><option>384</option><option selected>512</option><option>640</option><option>768</option></select>
+        </label>
+        <label>Height
+          <select id="height"><option>384</option><option selected>512</option><option>640</option><option>768</option></select>
+        </label>
+      </div>
+      <label><span class="lbl">Seed (blank = random) <span class="help" tabindex="0" role="button" aria-label="What is this?" aria-describedby="tip-seed">?<span class="tip" role="tooltip" id="tip-seed">The number that sets the starting noise. The same seed with the same prompt and settings gives the same image, so you can reuse a seed you like and adjust the prompt to make variations. Each image shows its seed, with a “Reuse seed” link.</span></span></span>
+        <input id="seed" type="number" min="0" placeholder="random">
+      </label>
+      <div id="estimate" hidden aria-live="polite"></div>
+      <div class="actions">
+        <button id="go" type="submit" disabled>Generate</button>
+        <button id="cancel" type="button" class="secondary" hidden>Cancel</button>
+      </div>
+      <div class="progress"><div id="bar"></div></div>
+      <div id="message" class="message"></div>
+    </form>
+    <section id="gallery"><div class="empty" id="empty">Generated images appear here.</div></section>
+  </main>
+
+  <script type="module">
+    import { initHelp } from "/js/help.js";
+    import { checkDevice, processorCheck, BACKENDS, CPU_MAX_SIDE, cpuThreads, estimateCpu, recordCpuRun, formatDuration } from "/js/device-check.js";
+    const $ = id => document.getElementById(id);
+    const sync = () => { $("stepsVal").textContent = $("steps").value; $("guidanceVal").textContent = $("guidance").value; renderEstimate(); };
+    $("steps").oninput = $("guidance").oninput = sync;
+    $("width").onchange = $("height").onchange = () => renderEstimate();
+
+    const MODEL_BASE = "/models/"; // models are only ever loaded from this site
+    const SD = "small-sd", PIXEL = "mini-pixel-art";
+    const PIXEL_BASE = `${MODEL_BASE}${PIXEL}/`;
+    const PIXEL_VARIANT = "l-p1"; // the best-quality size; the only one the site downloads
+
+    /** Per-model form settings. The ids match the server's /api/status keys. */
+    const MODELS = {
+      [SD]: {
+        prompt: "a cozy cabin in a snowy pine forest at dusk, warm light in the windows, highly detailed",
+        steps: { min: 5, max: 50, step: 1, value: 20 },
+        guidance: { min: 1, max: 15, step: 0.5, value: 7.5 },
+        tips: {
+          prompt: "Describe the image you want: subject, setting, style and lighting. Separate ideas with commas; earlier words usually carry more weight. Only the first 77 tokens (about 60 words) are used.",
+          steps: "How many times the image is refined, starting from random noise. More steps add detail but take longer: time grows in proportion. 20–30 is usually enough; above 40 rarely helps.",
+          guidance: "How closely the image follows the prompt. Low (1–4): looser and more varied. 7–8: balanced, the usual choice. High (12+): very literal, but colours can look harsh or oversaturated.",
+        },
+      },
+      [PIXEL]: {
+        prompt: "side-view knight with sword",
+        steps: { min: 4, max: 32, step: 1, value: 16 },
+        guidance: { min: 1, max: 4, step: 0.1, value: 1.5 },
+        tips: {
+          prompt: "A short noun phrase, like the training captions: “red potion bottle”, “golden key”, “green slime”. Optionally start with a view: front-view, three-quarter-view, top-down or side-view. Only the first 12 words count, and words the model never saw are ignored (the message lists them).",
+          steps: "How many times the sprite is refined from noise. 16 is the model’s default; fewer is faster but rougher, and more rarely helps.",
+          guidance: "How closely the sprite follows the caption. 1.5 is the model’s default; higher is more literal but less varied. Transparency uses the model’s own setting.",
+        },
+      },
+    };
+
+    let modelStatus = {}, busy = false, engine = null, pixel = null, abort = null;
+    let device = null, deviceChecking = false;
+    const load = (key, fallback) => { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } };
+    const save = (key, value) => { try { localStorage.setItem(key, value); } catch {} };
+
+    let backendChoice = load("sd-backend", "auto");
+    $("backend").value = backendChoice;
+    $("backend").onchange = () => {
+      backendChoice = $("backend").value;
+      save("sd-backend", backendChoice);
+      refresh();
+    };
+
+    // Each model keeps its own prompt, steps and guidance while you switch between them.
+    let model = load("sd-model", SD) in MODELS ? load("sd-model", SD) : SD;
+    const formState = Object.fromEntries(Object.entries(MODELS).map(([id, m]) =>
+      [id, { prompt: m.prompt, steps: m.steps.value, guidance: m.guidance.value }]));
+    function applyModel() {
+      const m = MODELS[model], state = formState[model];
+      $("model").value = model;
+      for (const [id, range] of [["steps", m.steps], ["guidance", m.guidance]])
+        Object.assign($(id), { min: range.min, max: range.max, step: range.step });
+      $("prompt").value = state.prompt;
+      $("steps").value = state.steps;
+      $("guidance").value = state.guidance;
+      for (const key of ["prompt", "steps", "guidance"]) $(`tip-${key}`).textContent = m.tips[key];
+      document.querySelectorAll("[data-for]").forEach(el => el.hidden = el.dataset.for !== model);
+      sync();
+    }
+    $("model").onchange = () => {
+      formState[model] = { prompt: $("prompt").value, steps: +$("steps").value, guidance: +$("guidance").value };
+      model = $("model").value;
+      save("sd-model", model);
+      applyModel();
+      showStatus();
+      refresh();
+    };
+
+    const modelReady = id => modelStatus[id]?.phase === "ready";
+    /** Where the pixel-art model runs: WebGPU if picked, else the CPU (it's tiny, so WebNN isn't used). */
+    const pixelRunsOn = () => resolvedBackend() === "webgpu" ? "webgpu" : "wasm";
+
+    /** The backend that will actually run: the user's choice, or what Auto picked for this device. */
+    const resolvedBackend = () => backendChoice !== "auto" ? backendChoice : device?.auto ?? "webgpu";
+
+    /** Device checks with the "Runs on" row and the verdict adjusted to the selected backend. */
+    function deviceReport() {
+      if (!device?.backends) return device;
+      if (model === PIXEL) {
+        // The sprite model is a few MB and runs anywhere, so the Stable Diffusion requirements don't apply.
+        const gpu = pixelRunsOn() === "webgpu", threads = cpuThreads();
+        const note = resolvedBackend() === "webnn" ? "WebNN isn't used for this small model; the CPU is fast enough." : "";
+        return { ...device, verdict: "ok", checks: [{ label: "Runs on", status: "ok", note,
+          value: gpu ? "GPU via WebGPU" : `CPU via WebAssembly, ${threads} thread${threads > 1 ? "s" : ""}` }] };
+      }
+      const checks = device.checks.map(c => c.label === "Runs on" ? processorCheck(resolvedBackend(), device.auto) : c);
+      const verdict = checks.some(c => c.status === "fail") ? "fail" : checks.some(c => c.status === "warn") ? "warn" : "ok";
+      return { ...device, checks, verdict };
+    }
+
+    async function runDeviceCheck() {
+      if (deviceChecking) return;
+      deviceChecking = true;
+      if (!device) $("device").innerHTML = `<div class="verdict"><span class="dot"></span>Checking this device…</div>`;
+      try { device = await checkDevice(MODEL_BASE); }
+      catch (err) { device = { verdict: "warn", checks: [{ label: "Check", value: "Device check failed", status: "warn", note: String(err) }] }; }
+      deviceChecking = false;
+      refresh();
+    }
+
+    function renderBackendOptions() {
+      if (!device?.backends) return;
+      for (const option of $("backend").options) {
+        if (option.value === "auto") { option.textContent = `Auto: ${BACKENDS[device.auto].label}`; continue; }
+        const b = device.backends[option.value];
+        option.disabled = !b.available;
+        option.textContent = BACKENDS[option.value].label + (b.available ? "" : " (unavailable)");
+        option.title = b.reason;
+      }
+      if ($("backend").selectedOptions[0]?.disabled) { backendChoice = "auto"; $("backend").value = "auto"; }
+    }
+
+    function renderDevice() {
+      if (!device) return;
+      const report = deviceReport();
+      const verdicts = {
+        ok: model === PIXEL ? "Runs on this device" : "Meets the requirements",
+        warn: "Should work, with caveats",
+        fail: "Doesn't meet the requirements",
+      };
+      const el = $("device");
+      el.innerHTML = `<div class="verdict"><span class="dot ${report.verdict}"></span></div>`;
+      el.querySelector(".verdict").append(verdicts[report.verdict]);
+      for (const c of report.checks) {
+        const row = document.createElement("div");
+        row.className = "row";
+        row.innerHTML = `<span class="dot"></span><span class="k"></span><span class="v"></span>`;
+        row.querySelector(".dot").classList.add(c.status);
+        row.querySelector(".dot").title = c.status;
+        row.querySelector(".k").textContent = c.label;
+        row.querySelector(".v").textContent = c.value;
+        if (c.note) { const n = document.createElement("span"); n.className = "note"; n.textContent = c.note; row.append(n); }
+        el.append(row);
+      }
+    }
+
+    /** The CPU can't make images larger than 512×512, so bigger sizes are disabled while it is selected. */
+    function applySizeLimit() {
+      const cpu = device && model === SD && resolvedBackend() === "wasm";
+      for (const select of [$("width"), $("height")]) {
+        for (const option of select.options) option.disabled = cpu && +option.value > CPU_MAX_SIDE;
+        if (select.selectedOptions[0]?.disabled) select.value = String(CPU_MAX_SIDE);
+      }
+    }
+
+    /** Time estimate shown whenever the CPU is the selected processor. */
+    function renderEstimate() {
+      const el = $("estimate");
+      el.hidden = !device || model !== SD || resolvedBackend() !== "wasm";
+      if (el.hidden) return;
+      const req = { steps: +$("steps").value, width: +$("width").value, height: +$("height").value, threads: cpuThreads() };
+      const est = estimateCpu(req);
+      el.innerHTML = `<strong></strong><span></span><span class="sub"></span>`;
+      el.querySelector("strong").textContent = `Estimated time on the CPU: ${formatDuration(est.total)}`;
+      el.querySelector("span").textContent =
+        `${req.steps} steps at ${req.width}×${req.height} using ${req.threads} thread${req.threads > 1 ? "s" : ""}, ` +
+        `about ${formatDuration(est.perStep, true)} per step. A GPU takes seconds.`;
+      el.querySelector(".sub").textContent = (est.calibrated
+        ? "Based on this device's last CPU image."
+        : `A rough guide from the thread count; your first CPU image refines it.`) +
+        ` The CPU is limited to ${CPU_MAX_SIDE}×${CPU_MAX_SIDE}; fewer steps or 384×384 are quicker.`;
+    }
+
+    function refresh() {
+      applySizeLimit();
+      renderEstimate();
+      renderBackendOptions();
+      renderDevice();
+      $("go").disabled = busy || !modelReady(model) || !device || deviceReport().verdict === "fail";
+      $("backend").disabled = $("model").disabled = busy;
+      $("cancel").hidden = !busy;
+    }
+
+    /** Header status for the selected model. */
+    function showStatus() {
+      const s = modelStatus[model], el = $("status");
+      if (!s) return;
+      el.className = "status" + (s.phase === "ready" ? " ready" : s.phase === "error" ? " error" : "");
+      el.textContent = s.phase === "ready" ? "Model available"
+        : s.phase === "error" ? `Model unavailable · ${s.detail}`
+        : s.phase === "waiting" ? "Site will fetch this model after the current download"
+        : `Site is fetching the model${s.detail ? " · " + s.detail : ""}`;
+    }
+
+    /** The site downloads the models on its first start, one after another; wait until it can serve them. */
+    async function pollModels() {
+      let pending = true;
+      try {
+        modelStatus = (await (await fetch("/api/status")).json()).models ?? {};
+        pending = Object.values(modelStatus).some(s => s.phase !== "ready" && s.phase !== "error");
+        showStatus();
+      } catch { $("status").className = "status"; $("status").textContent = "Site unreachable"; }
+      refresh();
+      if (pending) setTimeout(pollModels, 1500);
+    }
+
+    initHelp();
+
+    function setMessage(text, isError) { $("message").textContent = text; $("message").className = "message" + (isError ? " error" : ""); }
+
+    $("form").onsubmit = async e => {
+      e.preventDefault();
+      busy = true; refresh(); $("bar").style.width = "0";
+      const req = {
+        model, count: +$("count").value,
+        prompt: $("prompt").value, negativePrompt: $("negative").value,
+        steps: +$("steps").value, guidance: +$("guidance").value,
+        width: +$("width").value, height: +$("height").value,
+        seed: $("seed").value === "" ? null : +$("seed").value,
+      };
+      abort = new AbortController();
+      $("cancel").disabled = false; $("cancel").textContent = "Cancel";
+      try { await generate(req, abort.signal); }
+      catch (err) {
+        if (err.name === "AbortError") { setMessage("Cancelled."); $("bar").style.width = "0"; }
+        else { console.error(err); setMessage(err.message ?? String(err), true); }
+      }
+      abort = null;
+      busy = false; refresh();
+    };
+
+    // A model run can't be interrupted, so cancelling takes effect when the current step finishes.
+    $("cancel").onclick = () => {
+      abort?.abort();
+      $("cancel").disabled = true; $("cancel").textContent = "Cancelling…";
+      setMessage("Cancelling after the current step…");
+    };
+
+    async function generate(req, signal) {
+      const backend = resolvedBackend();
+      const { BrowserDiffusion, needsReloadFor } = await import("/js/browser-sd.js");
+      if (needsReloadFor(backend)) {
+        // The processor choice is saved, so it's still selected after the reload.
+        if (confirm("Switching between CPU and GPU processing needs a page reload, which clears the images generated so far. Reload now?"))
+          location.reload();
+        else setMessage("To use this processor, reload the page.");
+        return;
+      }
+      if (req.model === PIXEL) return generateSprites(req, signal, backend);
+      if (engine && engine.backend !== backend) {
+        setMessage("Switching processor…");
+        await engine.dispose();
+        engine = null;
+      }
+      if (!engine) {
+        engine = await BrowserDiffusion.load(MODEL_BASE, backend, s => setMessage(s));
+        runDeviceCheck(); // models are cached now
+      }
+      signal.throwIfAborted();
+
+      const seed = req.seed ?? Math.floor(Math.random() * 2 ** 32);
+      const started = performance.now();
+      const cpuEstimate = backend === "wasm" ? estimateCpu({ ...req, threads: cpuThreads() }) : null;
+      let firstStepDone = null;
+      setMessage("Encoding prompt…");
+      const blob = await engine.generate({ ...req, seed, signal }, (step, total) => {
+        if (signal.aborted) return; // keep the "Cancelling…" message
+        $("bar").style.width = `${(step / total) * 100}%`;
+        const now = performance.now(), elapsed = (now - started) / 1000;
+        if (step >= total) { setMessage(`Decoding… ${formatDuration(elapsed, true)} elapsed`); return; }
+
+        // Time left: the average step from step 2 on (step 1 includes loading), plus decoding.
+        let perStep;
+        if (step === 1) { firstStepDone = now; perStep = cpuEstimate?.perStep ?? elapsed; }
+        else perStep = (now - firstStepDone) / 1000 / (step - 1);
+        const left = perStep * (total - step) + (cpuEstimate?.decode ?? 1);
+        setMessage(`Step ${step} / ${total} · ${formatDuration(elapsed, true)} elapsed · ${formatDuration(left)} left`);
+      });
+      setMessage(`Done in ${formatDuration((performance.now() - started) / 1000, true)} on ${BACKENDS[backend].label}`);
+      if (backend === "wasm" && engine.lastRun) { recordCpuRun(engine.lastRun); renderEstimate(); }
+      addImage(URL.createObjectURL(blob), seed, req, BACKENDS[backend].label);
+    }
+
+    function addImage(url, seed, req, where) {
+      $("empty")?.remove();
+      const fig = document.createElement("figure");
+      fig.innerHTML = `<img alt=""><figcaption><div class="p"></div>
+        <div class="meta"><span class="tag"></span><span>seed ${seed}</span><span>${req.steps} steps</span><span>cfg ${req.guidance}</span>
+        <a download="small-sd-${seed}.png">Download</a><a href="#" class="reuse">Reuse seed</a></div></figcaption>`;
+      fig.querySelector("img").src = url;
+      fig.querySelector("img").alt = req.prompt;
+      fig.querySelector(".p").textContent = req.prompt;
+      fig.querySelector(".tag").textContent = where;
+      fig.querySelector("a[download]").href = url;
+      fig.querySelector(".reuse").onclick = ev => { ev.preventDefault(); $("seed").value = seed; };
+      $("gallery").prepend(fig);
+    }
+
+    async function generateSprites(req, signal, processor) {
+      const { PixelArt } = await import("/js/pixel-art.js");
+      if (pixel && pixel.processor !== processor) {
+        await pixel.dispose();
+        pixel = null;
+      }
+      if (!pixel) pixel = await PixelArt.load(PIXEL_BASE, PIXEL_VARIANT, processor, s => setMessage(s));
+      signal.throwIfAborted();
+
+      const unknown = pixel.unknownWords(req.prompt);
+      const seed = req.seed ?? Math.floor(Math.random() * 2 ** 32);
+      const started = performance.now();
+      const sprites = await pixel.generate({ ...req, seed, signal }, (step, total) => {
+        if (signal.aborted) return;
+        $("bar").style.width = `${(step / total) * 100}%`;
+        setMessage(`Step ${step} / ${total}`);
+      });
+      const where = BACKENDS[pixel.backend].label;
+      const seconds = (performance.now() - started) / 1000;
+      setMessage(`Done: ${sprites.length} sprite${sprites.length > 1 ? "s" : ""} in ${seconds < 10 ? seconds.toFixed(1) + " s" : formatDuration(seconds, true)} on ${where}` +
+        (unknown.length ? `. Unknown words, ignored: ${unknown.join(", ")}` : ""));
+      // Prepended one by one, so add the last first to keep them in seed order.
+      for (const s of [...sprites].reverse()) addSprite(s, req, where);
+    }
+
+    function addSprite({ seed, png, pngLarge }, req, where) {
+      $("empty")?.remove();
+      const small = URL.createObjectURL(png), large = URL.createObjectURL(pngLarge);
+      const fig = document.createElement("figure");
+      fig.innerHTML = `<img class="pixel" alt=""><figcaption><div class="p"></div>
+        <div class="meta"><span class="tag"></span><span>seed ${seed}</span><span>${req.steps} steps</span><span>cfg ${req.guidance}</span>
+        <a download="pixel-${seed}.png" class="dl1">PNG 16×16</a><a download="pixel-${seed}-128.png" class="dl8">128×128</a><a href="#" class="reuse">Reuse seed</a></div></figcaption>`;
+      fig.querySelector("img").src = large;
+      fig.querySelector("img").alt = req.prompt;
+      fig.querySelector(".p").textContent = req.prompt;
+      fig.querySelector(".tag").textContent = where;
+      fig.querySelector(".dl1").href = small;
+      fig.querySelector(".dl8").href = large;
+      fig.querySelector(".reuse").onclick = ev => { ev.preventDefault(); $("seed").value = seed; };
+      $("gallery").prepend(fig);
+    }
+
+    applyModel();
+    runDeviceCheck();
+    pollModels();
+  </script>
+</body>
+</html>

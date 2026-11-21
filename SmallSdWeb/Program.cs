@@ -1,8 +1,9 @@
+using Microsoft.AspNetCore.Rewrite;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.FileProviders;
 using SmallSdWeb;
 
-// Static host for in-browser image generation: serves the page, ONNX Runtime Web and the model files.
+// Static host for in-browser image generation and summarization: serves the pages, ONNX Runtime Web and the model files.
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddHttpClient();
@@ -19,6 +20,8 @@ app.Use(async (context, next) =>
     await next();
 });
 
+// Clean page URLs: /generate serves generate.html, and so on.
+app.UseRewriter(new RewriteOptions().AddRewrite(@"^(generate|summarize|about)/?$", "$1.html", skipRemainingRules: true));
 app.UseDefaultFiles();
 // Revalidate app files on every load (a 304 when unchanged), so a browser never mixes an old page with new scripts.
 app.UseStaticFiles(new StaticFileOptions
@@ -35,6 +38,7 @@ var modelTypes = new FileExtensionContentTypeProvider(new Dictionary<string, str
     [".onnx"] = "application/octet-stream",
     [".json"] = "application/json",
     [".txt"] = "text/plain",
+    [".bin"] = "application/octet-stream",
 });
 app.UseStaticFiles(new StaticFileOptions
 {
@@ -43,7 +47,7 @@ app.UseStaticFiles(new StaticFileOptions
     ContentTypeProvider = modelTypes,
 });
 
-// Whether the model files are available yet (they're downloaded on first start).
-app.MapGet("/api/status", (ModelDownloader models) => new { phase = models.Phase, detail = models.Detail });
+// Whether each model's files are available yet (they're downloaded on first start).
+app.MapGet("/api/status", (ModelDownloader models) => new { models = models.Status });
 
 app.Run();
