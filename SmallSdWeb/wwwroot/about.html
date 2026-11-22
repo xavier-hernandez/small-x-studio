@@ -28,6 +28,7 @@
       <li><a href="/">Home</a></li>
       <li><a href="/generate">Generate images</a></li>
       <li><a href="/summarize">Summarize text</a></li>
+      <li><a href="/summarize-file">Summarize a file</a></li>
       <li><a href="/about" aria-current="page">About</a></li>
       <li><a href="https://github.com/xavier-hernandez/small-x-studio" class="external" rel="noopener" target="_blank">GitHub<span class="sr-only"> (opens in a new tab)</span></a></li>
     </ul>
@@ -86,6 +87,11 @@
         as long to load and uses more memory. The model was trained on news, so it works best on factual English prose.
         It reads up to 1,024 tokens (about 750 words) at a time: longer text is split at sentence ends, with one summary
         paragraph per part.</li>
+      <li><strong>Files</strong> (PDF, Word <code>.docx</code> or text) are opened by the page itself, with the browser’s
+        File API: the file is read in this tab and is never uploaded, not even to this site. PDF text is read with
+        pdf.js, which rebuilds paragraphs from the text on each page and drops lone page numbers; Word files are
+        unzipped and read directly. Scanned PDFs (pictures of text) have no text to read, and older <code>.doc</code>
+        files need to be saved as <code>.docx</code> first. You can edit the text before summarizing it.</li>
       <li><strong>Seeds</strong> make images reproducible: the same seed, prompt and settings give the same image.
         “Reuse seed” on any image puts its seed back in the form.</li>
     </ul>
@@ -95,6 +101,7 @@
       <thead><tr><th>What</th><th>Where</th><th>How long</th></tr></thead>
       <tbody>
         <tr><td>Prompts, pasted text</td><td>Only in the page</td><td>Until you leave or reload it</td></tr>
+        <tr><td>Files you summarize</td><td>Read into the page’s memory; never uploaded or stored</td><td>Until you remove the file, leave or reload</td></tr>
         <tr><td>Generated images and summaries</td><td>The tab’s memory</td><td>Until you leave or reload; use Download or Copy to keep them</td></tr>
         <tr><td>Model files</td><td>The browser’s Cache API, for this site only</td><td>Until you delete them under <a href="#storage">Storage</a> below or clear site data, or the browser frees space when the disk is full</td></tr>
         <tr><td>Settings (processor, chosen model, measured CPU speed)</td><td><code>localStorage</code></td><td>Until you use Clear everything under <a href="#storage">Storage</a> or clear site data</td></tr>
@@ -145,8 +152,9 @@
 
     <h2>Built with</h2>
     <ul>
-      <li><a href="https://onnxruntime.ai/">ONNX Runtime Web</a> 1.29, served by this site (no CDN). It is the only
-        JavaScript library.</li>
+      <li><a href="https://onnxruntime.ai/">ONNX Runtime Web</a> 1.29, served by this site (no CDN).</li>
+      <li><a href="https://mozilla.github.io/pdf.js/">pdf.js</a> 6.5 (Apache 2.0), served by this site, for reading
+        text from PDFs. It loads only when you pick a PDF.</li>
       <li>Plain HTML, CSS and ES modules, with no build step. A small ASP.NET Core server hosts the files and answers
         the status check.</li>
     </ul>

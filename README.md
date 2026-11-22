@@ -22,6 +22,7 @@ files and the model files. Source: [github.com/xavier-hernandez/small-x-studio](
 | Home | `/` | Introduction, and whether each tool's models are ready on the server |
 | Generate images | `/generate` | Small SD (512px images) or Mini Pixel Art (16×16 sprites), with a device check and processor choice |
 | Summarize text | `/summarize` | DistilBART summaries, Fast (290 MB) or Best (1.1 GB) model, with length and search options |
+| Summarize a file | `/summarize-file` | The same summarizer for a PDF, Word (`.docx`) or text file, read in the browser and never uploaded |
 | About | `/about` | How it works for users, the models and licenses, what's stored in the browser, and a Storage section to delete stored models |
 
 ## Run it
@@ -130,6 +131,19 @@ penalty of 2.0. Text longer than the model's 1,024-token window is split at sent
 own summary paragraph. With these settings the model often stops mid-sentence, so a trailing fragment is dropped
 when a whole sentence comes before it.
 
+#### Files
+
+The file page reads the file with the browser's File API; it is never uploaded, not even to the host. The text is
+shown in an editable box before summarizing.
+
+| Type | How the text is read |
+|---|---|
+| PDF | [pdf.js](https://mozilla.github.io/pdf.js/) (`getTextContent` per page). Lines are joined into paragraphs by their spacing, words hyphenated across lines are rejoined, and lines that are only a page number are dropped. Scanned PDFs have no text layer and show an error; password-protected PDFs too |
+| Word (`.docx`) | Unzipped with the browser's `DecompressionStream` and read from `word/document.xml`: paragraphs, tables, tabs and breaks; deleted tracked changes and field codes are skipped. Older `.doc` files aren't supported |
+| Text (`.txt`, `.md`, `.csv`) | UTF-8, or UTF-16 with a BOM; anything else is read as Windows-1252 |
+
+Files up to 100 MB are accepted. The type is detected from the file's first bytes, then its extension.
+
 ## Configuration
 
 `SmallSdWeb/appsettings.json` sets where each model comes from and where it's stored:
@@ -164,11 +178,15 @@ The project has **no NuGet package references**. Everything it uses is part of t
 | Dependency | Version | License | Location |
 |---|---|---|---|
 | [onnxruntime-web](https://www.npmjs.com/package/onnxruntime-web) | 1.29.0 | MIT | `wwwroot/lib/onnxruntime-web/` (self-hosted, no CDN) |
+| [pdfjs-dist](https://www.npmjs.com/package/pdfjs-dist) | 6.5.438 | Apache 2.0 | `wwwroot/lib/pdfjs/` (self-hosted, no CDN) |
 
 Files used from onnxruntime-web:
 
 - `ort.webgpu.min.mjs` (66 KB): the runtime ES module.
 - `ort-wasm-simd-threaded.asyncify.mjs` (51 KB) and `.wasm` (25 MB): the WebAssembly runtime, used by every backend.
+
+Files used from pdfjs-dist: `build/pdf.min.mjs` (474 KB) and `build/pdf.worker.min.mjs` (1.3 MB), plus its
+`LICENSE`. The file page loads them only when a PDF is picked.
 
 There are no other JavaScript libraries, bundlers or npm install steps.
 
@@ -183,7 +201,8 @@ SmallSdWeb/
   wwwroot/
     index.html                    home page
     generate.html                 image generation
-    summarize.html                summarization
+    summarize.html                summarize pasted text
+    summarize-file.html           summarize a PDF, Word or text file
     about.html                    about the project, and the Storage section
     css/site.css                  shared styles: colours, navigation, form controls
     js/browser-sd.js              Small SD: CLIP tokenizer, DPM-Solver++ scheduler, diffusion pipeline; shared ORT setup and model cache
@@ -191,12 +210,15 @@ SmallSdWeb/
     js/pixel-art.js               Mini Pixel Art: word vocabulary, flow-matching sampler, palette snapping
     js/summarizer.js              summarizer: GPT-2 byte-level BPE tokenizer, encoder, beam search with a KV cache
     js/summarize-worker.js        runs the summarizer in a Web Worker
+    js/summarize-ui.js            summarizer controls shared by both summarize pages
+    js/file-text.js               reads text from PDF (pdf.js), .docx (zip + XML) and text files
     js/storage.js                 lists and deletes the models stored in the browser
     js/help.js                    "?" help bubbles and the model status line
     lib/onnxruntime-web/          ONNX Runtime Web
+    lib/pdfjs/                    pdf.js
 ```
 
-The host serves `/generate`, `/summarize` and `/about` without the `.html`.
+The host serves `/generate`, `/summarize`, `/summarize-file` and `/about` without the `.html`.
 
 ## Browser features
 
@@ -208,5 +230,6 @@ The host serves `/generate`, `/summarize` and `/about` without the `.html`.
 | Web Workers | Run CPU work off the page's thread: ONNX Runtime's proxy worker for Small SD, and the summarizer's own worker |
 | Cache API, Storage API | Store the model files, check free disk space, and list and delete stored models |
 | Canvas | Turn the output into PNG |
+| File API, `DecompressionStream`, `DOMParser` | Read the picked file locally: unzip `.docx` files and parse their XML |
 
 The image page detects which of these are available and shows whether the device meets the requirements.

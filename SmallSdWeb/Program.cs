@@ -21,7 +21,7 @@ app.Use(async (context, next) =>
 });
 
 // Clean page URLs: /generate serves generate.html, and so on.
-app.UseRewriter(new RewriteOptions().AddRewrite(@"^(generate|summarize|about)/?$", "$1.html", skipRemainingRules: true));
+app.UseRewriter(new RewriteOptions().AddRewrite(@"^(generate|summarize|summarize-file|about)/?$", "$1.html", skipRemainingRules: true));
 app.UseDefaultFiles();
 // Revalidate app files on every load (a 304 when unchanged), so a browser never mixes an old page with new scripts.
 app.UseStaticFiles(new StaticFileOptions

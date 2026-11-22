@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Summarize a file · Small X Studio</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/css/site.css">
+  <style>
+    main { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px; padding: 20px 24px 32px; }
+    @media (max-width: 820px) { main { grid-template-columns: 1fr; padding: 16px; } }
+    .drop { position: relative; display: grid; place-items: center; gap: 6px; padding: 28px 16px; text-align: center; cursor: pointer;
+      border: 2px dashed var(--line); border-radius: 12px; background: var(--bg); transition: border-color .15s, background .15s; }
+    .drop:hover, .drop:focus-within, .drop.over { border-color: var(--accent); }
+    .drop.over { background: var(--tile); }
+    .drop.disabled { opacity: .5; pointer-events: none; }
+    .drop strong { font-size: 15px; }
+    .drop .hint { color: var(--muted); font-size: 12px; font-weight: 400; }
+    .drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+    .file { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+    .file .name { font-weight: 600; overflow-wrap: anywhere; }
+    .file .meta { color: var(--muted); }
+    .file button { margin-left: auto; padding: 4px 10px; font-size: 12px; }
+    #text { min-height: 220px; font-size: 13px; }
+    .counts { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+    .warn-long { color: var(--warn); }
+    .note { font-size: 12px; color: var(--muted); margin: 0; }
+    #results { display: grid; gap: 16px; align-content: start; }
+    .result { padding: 16px 18px; display: grid; gap: 10px; }
+    .result p { margin: 0; line-height: 1.6; white-space: pre-wrap; }
+    .result .source { margin: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+    .result .meta { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; color: var(--muted); font-size: 12px; }
+    .result .meta button { margin-left: auto; padding: 4px 10px; font-size: 12px; }
+    .empty { color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; padding: 40px; text-align: center; }
+  </style>
+</head>
+<body>
+  <nav class="site-nav" aria-label="Main">
+    <a class="brand" href="/">Small X Studio</a>
+    <ul>
+      <li><a href="/">Home</a></li>
+      <li><a href="/generate">Generate images</a></li>
+      <li><a href="/summarize">Summarize text</a></li>
+      <li><a href="/summarize-file" aria-current="page">Summarize a file</a></li>
+      <li><a href="/about">About</a></li>
+      <li><a href="https://github.com/xavier-hernandez/small-x-studio" class="external" rel="noopener" target="_blank">GitHub<span class="sr-only"> (opens in a new tab)</span></a></li>
+    </ul>
+  </nav>
+  <div class="page-head">
+    <h1>Summarize a file</h1>
+    <div id="status" class="status">Connecting…</div>
+  </div>
+  <main>
+    <form id="form" class="panel">
+      <span class="lbl" style="font-size:13px;font-weight:550">File <span class="help" tabindex="0" role="button" aria-label="What is this?" aria-describedby="tip-file">?<span class="tip" role="tooltip" id="tip-file">A PDF, a Word document (.docx) or a text file, in English. The file is opened by this page, in your browser: it isn’t uploaded, not even to this site. PDFs need a text layer; scanned pages (pictures of text) have none. Older .doc files need to be saved as .docx first.</span></span></span>
+      <label class="drop" id="drop">
+        <strong>Choose a file or drop it here</strong>
+        <span class="hint">PDF, Word (.docx) or text · read in your browser, never uploaded</span>
+        <input type="file" id="file" aria-label="Choose a file to summarize">
+      </label>
+      <div class="file" id="file-info" hidden>
+        <span class="name" id="file-name"></span><span class="meta" id="file-meta"></span>
+        <button type="button" class="secondary" id="remove">Remove</button>
+      </div>
+      <label id="text-label" hidden><span class="lbl">Text from the file <span class="help" tabindex="0" role="button" aria-label="What is this?" aria-describedby="tip-text">?<span class="tip" role="tooltip" id="tip-text">This is what the model will read. You can edit it first: delete a table of contents, references or other parts you don’t want summarized. The model reads up to about 750 words at a time; longer text is split into parts, and each part gets its own summary paragraph.</span></span></span>
+        <textarea id="text" spellcheck="false"></textarea>
+      </label>
+      <div class="counts" id="counts-row" hidden><span id="counts"></span><span id="long" class="warn-long"></span></div>
+      <label><span class="lbl">Model <span class="help" tabindex="0" role="button" aria-label="What is this?" aria-describedby="tip-variant">?<span class="tip" role="tooltip" id="tip-variant">Both are the same summarization model. Fast stores its weights as 8-bit integers: a 290 MB download that loads in a few seconds. Best keeps full precision: a 1.1 GB download that takes about twice as long to load and uses more memory, but writes noticeably better summaries. Once loaded, both summarize at about the same speed.</span></span></span>
+        <select id="variant">
+          <option value="fast" selected>Fast · 290 MB</option>
+          <option value="best">Best · 1.1 GB</option>
+        </select>
+      </label>
+      <div class="row">
+        <label><span class="lbl">Length <span class="help" tabindex="0" role="button" aria-label="What is this?" aria-describedby="tip-length">?<span class="tip" role="tooltip" id="tip-length">Roughly how long each summary paragraph is. Short is about 25–60 words, Medium (the model’s default) about 40–100, Long about 75–180. The model may stop earlier when it has covered the main points.</span></span></span>
+          <select id="length"><option value="short">Short</option><option value="medium" selected>Medium</option><option value="long">Long</option></select>
+        </label>
+        <label><span class="lbl">Search <span class="help" tabindex="0" role="button" aria-label="What is this?" aria-describedby="tip-search">?<span class="tip" role="tooltip" id="tip-search">How the summary is written, word by word. Thorough keeps 4 candidate summaries at every step and picks the most likely (beam search, the model’s own setting); it tends to be shorter and stick closer to the text. Quick keeps only the single most likely next word: about twice as fast, often a little longer, but it can wander.</span></span></span>
+          <select id="beams"><option value="4" selected>Thorough</option><option value="1">Quick</option></select>
+        </label>
+      </div>
+      <div class="actions">
+        <button id="go" type="submit" disabled>Summarize</button>
+        <button id="cancel" type="button" class="secondary" hidden>Cancel</button>
+      </div>
+      <div class="progress"><div id="bar"></div></div>
+      <div id="message" class="message"></div>
+      <p class="note">The file is read and summarized on your device, in this browser: nothing is uploaded. The first run with a model downloads it (<span id="size">290 MB</span>); later runs load it from the browser’s cache.</p>
+    </form>
+    <section id="results" aria-live="polite"><div class="empty" id="empty">Summaries appear here.</div></section>
+  </main>
+
+  <script type="module">
+    import { setupSummarizer, describeLength, estimate } from "/js/summarize-ui.js";
+    import { extractText, FileTextError, ACCEPT, formatSize } from "/js/file-text.js";
+    const $ = id => document.getElementById(id);
+    const LONG_PARTS = 10;
+
+    let current = null, reading = false;
+    $("file").accept = ACCEPT;
+
+    const ui = setupSummarizer({
+      getText: () => $("text").value,
+      lock: ["remove"],
+      canStart: () => !reading && !!current && !!$("text").value.trim(),
+      source: () => current?.name ?? "",
+      onBusy: busy => { $("text").readOnly = busy; $("file").disabled = busy || reading; $("drop").classList.toggle("disabled", busy || reading); },
+    });
+
+    function updateCounts() {
+      const text = $("text").value;
+      $("counts").textContent = describeLength(text);
+      const { parts } = estimate(text);
+      $("long").textContent = parts > LONG_PARTS ? "Long file: this will take a while. You can delete parts of the text first." : "";
+      ui.refresh();
+    }
+    $("text").oninput = updateCounts;
+
+    function show(hasFile) {
+      for (const id of ["file-info", "text-label", "counts-row"]) $(id).hidden = !hasFile;
+    }
+
+    async function open(file) {
+      if (!file || reading || ui.busy()) return;
+      reading = true; ui.refresh();
+      $("file").disabled = true; $("drop").classList.add("disabled");
+      current = null; show(false); $("text").value = "";
+      ui.setMessage(`Reading ${file.name}…`);
+      try {
+        const { text, kind, pages } = await extractText(file, (done, total) => ui.setMessage(`Reading ${file.name} · page ${done} of ${total}`));
+        current = { name: file.name };
+        $("file-name").textContent = file.name;
+        $("file-meta").textContent = [kind, pages ? `${pages} page${pages > 1 ? "s" : ""}` : "", formatSize(file.size)].filter(Boolean).join(" · ");
+        $("text").value = text;
+        show(true);
+        ui.setMessage("");
+      } catch (e) {
+        ui.setMessage(e instanceof FileTextError ? e.message : `Couldn't read this file: ${e?.message ?? e}`, true);
+      } finally {
+        reading = false;
+        $("file").value = "";
+        $("file").disabled = false; $("drop").classList.remove("disabled");
+        updateCounts();
+      }
+    }
+
+    $("file").onchange = () => open($("file").files[0]);
+    $("remove").onclick = () => { current = null; $("text").value = ""; show(false); ui.setMessage(""); updateCounts(); };
+
+    // Dropping a file anywhere on the page opens it here, instead of the browser navigating to it.
+    let depth = 0;
+    addEventListener("dragenter", e => { if (e.dataTransfer?.types.includes("Files")) { e.preventDefault(); depth++; $("drop").classList.add("over"); } });
+    addEventListener("dragleave", () => { if (--depth <= 0) { depth = 0; $("drop").classList.remove("over"); } });
+    addEventListener("dragover", e => { if (e.dataTransfer?.types.includes("Files")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } });
+    addEventListener("drop", e => {
+      if (!e.dataTransfer?.files.length) return;
+      e.preventDefault(); depth = 0; $("drop").classList.remove("over");
+      open(e.dataTransfer.files[0]);
+    });
+
+    updateCounts();
+  </script>
+</body>
+</html>

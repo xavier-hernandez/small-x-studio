@@ -19,6 +19,7 @@
     .result p { margin: 0; line-height: 1.6; white-space: pre-wrap; }
     .result .meta { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; color: var(--muted); font-size: 12px; }
     .result .meta button { margin-left: auto; padding: 4px 10px; font-size: 12px; }
+    .result .source { margin: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
     .empty { color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; padding: 40px; text-align: center; }
   </style>
 </head>
@@ -29,6 +30,7 @@
       <li><a href="/">Home</a></li>
       <li><a href="/generate">Generate images</a></li>
       <li><a href="/summarize" aria-current="page">Summarize text</a></li>
+      <li><a href="/summarize-file">Summarize a file</a></li>
       <li><a href="/about">About</a></li>
       <li><a href="https://github.com/xavier-hernandez/small-x-studio" class="external" rel="noopener" target="_blank">GitHub<span class="sr-only"> (opens in a new tab)</span></a></li>
     </ul>
@@ -72,9 +74,8 @@
   </main>
 
   <script type="module">
-    import { initHelp, watchModel } from "/js/help.js";
+    import { setupSummarizer, describeLength } from "/js/summarize-ui.js";
     const $ = id => document.getElementById(id);
-    const CHUNK_TOKENS = 1022, TOKENS_PER_WORD = 1.35; // estimate only; the worker counts exact tokens
     const SAMPLE = `The city council voted on Tuesday to approve a new plan for public transport that will add three bus routes and extend the tram line to the northern suburbs by 2028. The plan, which has been debated for more than two years, is expected to cost about 450 million dollars, with most of the money coming from a regional infrastructure fund and the rest from a small increase in parking fees in the city centre.
 
 Supporters say the changes will cut commuting times for tens of thousands of residents who currently rely on cars, and will reduce traffic and air pollution in the busiest neighbourhoods. "This is the biggest investment in public transport our city has made in a generation," the mayor said after the vote. "People in the north have waited far too long for a fast and reliable connection to the centre."
@@ -83,116 +84,16 @@ Critics, including several local business groups, argue that higher parking fees
 
 Construction on the first section of the tram extension is due to start next spring. The new bus routes will begin running in September, and the council has promised to review parking fees after the first year.`;
 
-    // Mirrors VARIANTS in js/summarizer.js (not imported here, so the page doesn't load ONNX Runtime itself).
-    // `status` is the server's /api/status key.
-    const VARIANTS = {
-      fast: { status: "summarizer", label: "Fast", size: "290 MB" },
-      best: { status: "summarizer-full", label: "Best", size: "1.1 GB" },
-    };
-    const SEARCH = { 4: "Thorough", 1: "Quick" };
-    const load = (key, fallback) => { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } };
-    const save = (key, value) => { try { localStorage.setItem(key, value); } catch {} };
-
-    let ready = false, busy = false, worker = null, job = null;
-    $("variant").value = load("summarizer-variant", "fast") in VARIANTS ? load("summarizer-variant", "fast") : "fast";
-    $("size").textContent = VARIANTS[$("variant").value].size;
-
-    function refresh() {
-      $("go").disabled = busy || !ready || !$("text").value.trim();
-      $("cancel").hidden = !busy;
-      for (const id of ["variant", "length", "beams", "sample", "clear"]) $(id).disabled = busy;
-      $("text").readOnly = busy;
-    }
-    function setMessage(text, isError) { $("message").textContent = text; $("message").className = "message" + (isError ? " error" : ""); }
-
-    function updateCounts() {
-      const text = $("text").value.trim();
-      const words = text ? text.split(/\s+/).length : 0;
-      const parts = Math.max(1, Math.ceil(words * TOKENS_PER_WORD / CHUNK_TOKENS));
-      $("counts").textContent = !words ? "0 words"
-        : `${words.toLocaleString()} word${words > 1 ? "s" : ""}` + (parts > 1 ? ` · about ${parts} parts, one paragraph each` : "");
-      refresh();
-    }
+    const ui = setupSummarizer({
+      getText: () => $("text").value,
+      lock: ["sample", "clear"],
+      onBusy: busy => $("text").readOnly = busy,
+    });
+    function updateCounts() { $("counts").textContent = describeLength($("text").value); ui.refresh(); }
     $("text").oninput = updateCounts;
     $("sample").onclick = () => { $("text").value = SAMPLE; updateCounts(); };
     $("clear").onclick = () => { $("text").value = ""; updateCounts(); $("text").focus(); };
-
-    /** The summarizer runs in a worker, created on first use and kept, so the model loads once per visit. */
-    function getWorker() {
-      if (worker) return worker;
-      worker = new Worker("/js/summarize-worker.js", { type: "module" });
-      worker.onmessage = ({ data }) => job?.[data.type]?.(data);
-      worker.onerror = e => { worker = null; job?.error({ message: e.message || "The summarizer stopped unexpectedly." }); };
-      return worker;
-    }
-
-    $("form").onsubmit = e => {
-      e.preventDefault();
-      const req = { text: $("text").value, variant: $("variant").value, length: $("length").value, beams: +$("beams").value };
-      busy = true; refresh();
-      $("bar").style.width = "0"; $("cancel").disabled = false; $("cancel").textContent = "Cancel";
-      setMessage("Starting…");
-      const done = () => { job = null; busy = false; refresh(); };
-      job = {
-        status: ({ text }) => setMessage(text),
-        progress: ({ chunk, chunks, step, maxSteps }) => {
-          if (job.cancelling) return;
-          $("bar").style.width = `${((chunk - 1 + step / maxSteps) / chunks) * 100}%`;
-          setMessage(`Writing the summary${chunks > 1 ? ` · part ${chunk} of ${chunks}` : ""} · ${step} tokens`);
-        },
-        result: r => {
-          $("bar").style.width = "100%";
-          setMessage(`Done in ${r.seconds < 60 ? r.seconds.toFixed(1) + " s" : Math.round(r.seconds / 60) + " min"}`);
-          addResult(r, req);
-          done();
-        },
-        error: ({ message, cancelled }) => {
-          $("bar").style.width = "0";
-          setMessage(cancelled ? "Cancelled." : message, !cancelled);
-          done();
-        },
-      };
-      getWorker().postMessage({ type: "summarize", ...req });
-    };
-
-    // Decoding can't stop mid-step, so cancelling takes effect after the current token.
-    $("cancel").onclick = () => {
-      if (!job) return;
-      job.cancelling = true;
-      worker?.postMessage({ type: "cancel" });
-      $("cancel").disabled = true; $("cancel").textContent = "Cancelling…";
-      setMessage("Cancelling…");
-    };
-
-    function addResult({ summary, inputTokens, chunks, seconds }, req) {
-      $("empty")?.remove();
-      const card = document.createElement("article");
-      card.className = "result panel";
-      card.innerHTML = `<p></p><div class="meta"><span class="tag"></span><span></span><span></span><button type="button" class="secondary">Copy</button></div>`;
-      card.querySelector("p").textContent = summary;
-      const words = summary.split(/\s+/).length;
-      card.querySelector(".tag").textContent =
-        `${VARIANTS[req.variant].label} model · ${req.length[0].toUpperCase()}${req.length.slice(1)} · ${SEARCH[req.beams]}`;
-      const [a, b] = card.querySelectorAll(".meta > span:not(.tag)");
-      a.textContent = `${words} words from ${inputTokens.toLocaleString()} tokens${chunks > 1 ? ` in ${chunks} parts` : ""}`;
-      b.textContent = `${seconds.toFixed(1)} s`;
-      const copy = card.querySelector("button");
-      copy.onclick = async () => {
-        try { await navigator.clipboard.writeText(summary); copy.textContent = "Copied"; }
-        catch { copy.textContent = "Copy failed"; }
-        setTimeout(() => copy.textContent = "Copy", 1500);
-      };
-      $("results").prepend(card);
-    }
-
-    initHelp();
     updateCounts();
-    const status = watchModel(() => VARIANTS[$("variant").value].status, $("status"), s => { ready = s?.phase === "ready"; refresh(); });
-    $("variant").onchange = () => {
-      save("summarizer-variant", $("variant").value);
-      $("size").textContent = VARIANTS[$("variant").value].size;
-      status.show();
-    };
   </script>
 </body>
 </html>

@@ -30,6 +30,7 @@
       <li><a href="/" aria-current="page">Home</a></li>
       <li><a href="/generate">Generate images</a></li>
       <li><a href="/summarize">Summarize text</a></li>
+      <li><a href="/summarize-file">Summarize a file</a></li>
       <li><a href="/about">About</a></li>
       <li><a href="https://github.com/xavier-hernandez/small-x-studio" class="external" rel="noopener" target="_blank">GitHub<span class="sr-only"> (opens in a new tab)</span></a></li>
     </ul>
@@ -37,7 +38,7 @@
 
   <section class="hero">
     <h1>Small AI models, running in your browser</h1>
-    <p>Make images and summarize text on your own device. The models download once from this site and run locally,
+    <p>Make images and summarize text and documents on your own device. The models download once from this site and run locally,
       on your GPU or CPU: your prompts, text and results never leave the browser.</p>
   </section>
 
@@ -61,6 +62,16 @@
       </ul>
       <span class="model" data-models="summarizer summarizer-full"><span class="dot"></span><span>Checking model…</span></span>
       <span class="go">Open the summarizer →</span>
+    </a>
+    <a class="tool panel" href="/summarize-file">
+      <h2>Summarize a file</h2>
+      <p>Pick a PDF, Word document or text file and get a summary of it.</p>
+      <ul>
+        <li>The file is read in your browser and never uploaded, not even to this site</li>
+        <li>Same summarizer and options as Summarize text; you can edit the text first</li>
+      </ul>
+      <span class="model" data-models="summarizer summarizer-full"><span class="dot"></span><span>Checking model…</span></span>
+      <span class="go">Open the file summarizer →</span>
     </a>
   </section>
 
